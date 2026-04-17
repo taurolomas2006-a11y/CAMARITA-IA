@@ -4,8 +4,8 @@ import { Camera, RefreshCw, AlertTriangle } from 'lucide-react';
 import { analyzeImage } from '../services/visionModelManager';
 import { useInventoryStore } from '../store/useInventoryStore';
 
-// CONSTANTE CRUCIAL: 7200000 ms (2 horas). Modificar a 10000 ms (10 seg) para pruebas en desarrollo.
-const SCAN_INTERVAL = 10000; 
+// CONSTANTE CRUCIAL: 3600000 ms (1 hora). Modificar a 10000 ms (10 seg) para pruebas en desarrollo.
+const SCAN_INTERVAL = 3600000; 
 
 export default function Scanner({ setNextScanCountdown, isProcessing, setIsProcessing }) {
   const webcamRef = useRef(null);
@@ -77,6 +77,7 @@ export default function Scanner({ setNextScanCountdown, isProcessing, setIsProce
       
       if (countdownValor <= 0) {
         ejecutarEscaneoAutonomo();
+        countdownValor = SCAN_INTERVAL / 1000;
       }
     }, 1000);
 
