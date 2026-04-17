@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useInventoryStore } from '../store/useInventoryStore';
-import { Clock, Box, ShieldCheck, MapPin } from 'lucide-react';
+import { Clock, Box } from 'lucide-react';
 
 export default function InventoryTable() {
   const inventory = useInventoryStore((state) => state.inventory);
@@ -46,15 +46,13 @@ export default function InventoryTable() {
           <thead>
             <tr className="bg-white/5 text-white/60 text-sm uppercase tracking-wider font-semibold border-b border-white/10">
               <th className="p-4 py-3"><div className="flex items-center"><Box className="w-4 h-4 mr-2"/>Producto</div></th>
-              <th className="p-4 py-3"><div className="flex items-center"><MapPin className="w-4 h-4 mr-2"/>Ubicación</div></th>
-              <th className="p-4 py-3"><div className="flex items-center"><ShieldCheck className="w-4 h-4 mr-2"/>Estado Visual</div></th>
               <th className="p-4 py-3"><div className="flex items-center"><Clock className="w-4 h-4 mr-2"/>Tiempo Transcurrido</div></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 text-sm">
             {inventory.length === 0 ? (
               <tr>
-                <td colSpan="4" className="p-8 text-center text-white/40 italic">
+                <td colSpan="2" className="p-8 text-center text-white/40 italic">
                   No hay productos registrados en el frigorífico. 
                   <br />Esperando próximo escaneo...
                 </td>
@@ -63,16 +61,6 @@ export default function InventoryTable() {
               inventory.map((item, id) => (
                 <tr key={`${item.objeto}-${id}`} className="hover:bg-white/5 transition-colors duration-200">
                   <td className="p-4 font-medium text-white/90">{item.objeto}</td>
-                  <td className="p-4 text-white/70">{item.ubicacion}</td>
-                  <td className="p-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      item.estado_visual.toLowerCase() === 'abierto' 
-                        ? 'bg-yellow-500/10 text-yellow-500' 
-                        : 'bg-green-500/10 text-green-400'
-                    }`}>
-                      {item.estado_visual}
-                    </span>
-                  </td>
                   <td className="p-4 font-mono text-white/60">
                     {formatearTiempoTranscurrido(item.timestamp_ingreso)}
                   </td>
