@@ -30,6 +30,9 @@ export default function Scanner({ setNextScanCountdown, isProcessing, setIsProce
     navigator.mediaDevices.enumerateDevices().then(handleDevices);
   }, [handleDevices]);
 
+  const scanInProgress = useRef(false);
+  const countdownRef = useRef(SCAN_INTERVAL / 1000);
+
   /**
    * Extrae el frame, lo convierte y llama a la API mock de IA.
    * Documentación JSDoc
@@ -37,13 +40,15 @@ export default function Scanner({ setNextScanCountdown, isProcessing, setIsProce
    * @description Extrae frame base64 del webcam, lo manda a IAModel y actualiza Zustand.
    * @returns {Promise<void>} 
    */
-  const ejecutarEscaneoAutonomo = async () => {
-    if (isProcessing) return;
+  const ejecutarEscaneoAutonomo = useCallback(async () => {
+    if (scanInProgress.current) return;
     
+    scanInProgress.current = true;
+    setIsProcessing(true);
+    setErrorStatus(false);
+
     try {
       if (webcamRef.current) {
-        setIsProcessing(true);
-        setErrorStatus(false);
         const imageSrc = webcamRef.current.getScreenshot();
         
         if (!imageSrc) throw new Error("No frame captured");
@@ -58,33 +63,37 @@ export default function Scanner({ setNextScanCountdown, isProcessing, setIsProce
       console.error("Falla en el ciclo de escaneo: ", err);
       setErrorStatus(true);
     } finally {
-      setIsProcessing(false);
-      setNextScanCountdown(SCAN_INTERVAL / 1000); // resetear contador UI
-    }
-  };
-
-  // Motor de Bucle Principal (2 Horas o Testing)
-  useEffect(() => {
-    let countdownValor = SCAN_INTERVAL / 1000;
-    
-    // Ejecución Inmediata si queremos un trigger inicial, opcional
-    // ejecutarEscaneoAutonomo();
-    
-    // Intervalo secundario de Cuenta regresiva UI 1 Segundo
-    const secTimer = setInterval(() => {
-      countdownValor -= 1;
-      setNextScanCountdown(countdownValor);
+      // Resetear contadores y estados
+      countdownRef.current = SCAN_INTERVAL / 1000;
+      setNextScanCountdown(countdownRef.current);
       
-      if (countdownValor <= 0) {
-        ejecutarEscaneoAutonomo();
-        countdownValor = SCAN_INTERVAL / 1000;
+      setIsProcessing(false);
+      scanInProgress.current = false;
+    }
+  }, [updateInventoryFromScan, setIsProcessing, setNextScanCountdown]);
+
+  // Motor de Bucle Principal (Seguro contra closures)
+  useEffect(() => {
+    // Establecer la UI inicialmente
+    // setNextScanCountdown(countdownRef.current); // opcional
+
+    const secTimer = setInterval(() => {
+      // Bloquear el conteo si el modelo de red está en análisis
+      if (!scanInProgress.current) {
+        countdownRef.current = Math.max(countdownRef.current - 1, 0);
+        
+        if (countdownRef.current === 0) {
+          // Forzar a 0 antes de procesar
+          setNextScanCountdown(0);
+          ejecutarEscaneoAutonomo();
+        } else {
+          setNextScanCountdown(countdownRef.current);
+        }
       }
     }, 1000);
 
-    return () => {
-      clearInterval(secTimer);
-    };
-  }, []);
+    return () => clearInterval(secTimer);
+  }, [ejecutarEscaneoAutonomo, setNextScanCountdown]);
 
   return (
     <div className="relative group rounded-xl overflow-hidden glass-panel p-2">
