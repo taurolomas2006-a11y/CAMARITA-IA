@@ -4,19 +4,25 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm run models:catalog && vite",
+    "build": "npm run models:catalog && vite build",
+    "models:catalog": "node scripts/build-model-catalog.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "test:production": "playwright test --config=playwright.production.config.js",
+    "bridge": "node bridge/server.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
+    "onnxruntime-web": "1.31.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-webcam": "^7.2.0",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",

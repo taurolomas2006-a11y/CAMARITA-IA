@@ -1,0 +1,27 @@
+{
+  "sourceArchiveSha256": "54d0e1f69f224a32e10b2fcdd1803b739321bc4169ec2698d4f75c7d34492399",
+  "sourceModel": "TODO_cont20ep_20261104_211244",
+  "versions": {
+    "tensorflow": "2.21.0",
+    "tf2onnx": "1.17.0",
+    "onnx": "1.23.2",
+    "onnxruntime": "1.31.1"
+  },
+  "originalInput": "TensorSpec(shape=(1, None, None, 3), dtype=tf.uint8, name='input_tensor')",
+  "onnxInput": "[1, 'unk__1580', 'unk__1581', 3]",
+  "maxAbsoluteErrors": {
+    "detection_boxes": 8.940696716308594e-07,
+    "detection_scores": 2.644956111907959e-06,
+    "detection_classes": 0.0,
+    "num_detections": 0.0
+  },
+  "originalCount": 100,
+  "sampleSize": [
+    1,
+    893,
+    1600,
+    3
+  ],
+  "cpuParity": "passed",
+  "cameraTest": "pending-camera-off"
+}

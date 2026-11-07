@@ -1,0 +1,7 @@
+{
+  "rtspUrl": "rtsp://USUARIO:CLAVE@IP-CAMARA:554/RUTA-CONFIRMADA",
+  "token": "GENERAR-CON-SETUP-PS1",
+  "port": 1985,
+  "host": "0.0.0.0",
+  "allowedOrigins": ["https://camarita-ia.vercel.app", "http://localhost:5173", "http://localhost:4173"]
+}

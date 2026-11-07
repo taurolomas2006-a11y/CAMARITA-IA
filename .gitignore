@@ -1,3 +1,9 @@
 .vercel
 .env*.local
 node_modules/
+.tools/
+bridge/*.local.*
+bridge/runtime/
+test-results/
+dist/
+*.log

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "id": "ssd-todo-50ep-v1",
+      "name": "SSD bebidas · TODO 50 épocas",
+      "version": "1.0.1",
+      "format": "onnx",
+      "runtime": "onnx-ssd",
+      "file": "model.onnx",
+      "labels": [
+        "coca_cola",
+        "manaos_pomelo",
+        "pritty",
+        "doble_cola",
+        "agua",
+        "sprite"
+      ],
+      "confidenceThreshold": 0.5,
+      "input": {
+        "name": "image:0",
+        "type": "uint8",
+        "layout": "NHWC",
+        "shape": [
+          1,
+          -1,
+          -1,
+          3
+        ]
+      },
+      "outputs": {
+        "detection_boxes": "Identity:0",
+        "detection_scores": "Identity_1:0",
+        "detection_classes": "Identity_2:0",
+        "num_detections": "Identity_3:0"
+      },
+      "classIdOffset": 1,
+      "duplicateIouThreshold": 0.85,
+      "boxFormat": "yxyx-normalized",
+      "preprocessing": "original-rgb-uint8",
+      "nms": "included",
+      "experimental": true,
+      "sourceModelId": "TODO_cont20ep_20261104_211244",
+      "architecture": "ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8",
+      "bytes": 11452783,
+      "sha256": "b38be44ebb07f338ab62a51ec52e5764a824a123fd9a93d7bbfb6cd891dac80b"
+    }
+  ]
+}

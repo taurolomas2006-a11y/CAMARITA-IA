@@ -1,208 +1,97 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import Webcam from 'react-webcam';
-import { Camera, RefreshCw, AlertTriangle, Wifi } from 'lucide-react';
-import { analyzeImage } from '../services/visionModelManager';
-import { useInventoryStore } from '../store/useInventoryStore';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, PlugZap, Unplug } from 'lucide-react';
+import { useCamera } from '../hooks/useCamera.js';
+import { useInventoryStore } from '../store/useInventoryStore.js';
+import { startContinuousDetection } from '../services/detectionLoop.js';
+import { modelKey } from '../domain/modelCatalog.js';
 
-// CONSTANTE CRUCIAL: 3600000 ms (1 hora). Modificar a 10000 ms (10 seg) para pruebas en desarrollo.
-const SCAN_INTERVAL = 3600000; 
-
-export default function Scanner({ setNextScanCountdown, isProcessing, setIsProcessing }) {
-  const webcamRef = useRef(null);
-  const wifiImgRef = useRef(null);
-  const [errorStatus, setErrorStatus] = useState(false);
-  const [cameras, setCameras] = useState([]);
-  const [deviceId, setDeviceId] = useState({});
-  const [isWifiMode, setIsWifiMode] = useState(false);
-  const [wifiUrl, setWifiUrl] = useState('');
-  const updateInventoryFromScan = useInventoryStore((state) => state.updateInventoryFromScan);
-
-  // Cargar dispositivos disponibles
-  const handleDevices = useCallback(
-    (mediaDevices) => {
-      const videoDevices = mediaDevices.filter(({ kind }) => kind === "videoinput");
-      setCameras(videoDevices);
-      if(videoDevices.length > 0 && !deviceId) {
-        setDeviceId(videoDevices[0].deviceId);
-      }
-    },
-    [deviceId]
-  );
+export default function Scanner({ models, onTelemetry }) {
+  const { engine, selected, fail } = models;
+  const videoRef = useRef(null);
+  const imageCanvasRef = useRef(null);
+  const markPending = useInventoryStore((state) => state.markPending);
+  const applyDetections = useInventoryStore((state) => state.applyDetections);
+  const [mode, setMode] = useState('bridge');
+  const [deviceId, setDeviceId] = useState('');
+  const [devices, setDevices] = useState([]);
+  const [url, setUrl] = useState('http://localhost:1985');
+  const [token, setToken] = useState('');
+  const [activeConfig, setActiveConfig] = useState(null);
+  const [overlays, setOverlays] = useState([]);
+  const [visible, setVisible] = useState(!document.hidden);
+  const observationGeneration = useRef(0);
+  const interrupt = useCallback(() => { observationGeneration.current++; markPending(); setOverlays([]); }, [markPending]);
+  const camera = useCamera(videoRef, imageCanvasRef, interrupt);
+  const cameraState = camera.status.state;
 
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(handleDevices);
-  }, [handleDevices]);
+    const enumerate = () => navigator.mediaDevices?.enumerateDevices().then((all) => setDevices(all.filter((device) => device.kind === 'videoinput'))).catch(() => {});
+    enumerate();
+    navigator.mediaDevices?.addEventListener('devicechange', enumerate);
+    return () => navigator.mediaDevices?.removeEventListener('devicechange', enumerate);
+  }, [cameraState]);
+  useEffect(() => {
+    const onVisibility = () => { setVisible(!document.hidden); interrupt(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [interrupt]);
 
-  const scanInProgress = useRef(false);
-  const countdownRef = useRef(SCAN_INTERVAL / 1000);
+  useEffect(() => {
+    interrupt();
+    if (cameraState !== 'live' || !engine || !selected || !visible || !activeConfig) return;
+    const source = activeConfig.mode === 'device' ? `device:${activeConfig.deviceId || 'default'}` : `${activeConfig.mode}:${activeConfig.url}`;
+    const context = `${source}|${modelKey(selected)}`;
+    const generation = observationGeneration.current;
+    return startContinuousDetection({
+      capture: camera.capture,
+      infer: engine.infer,
+      onResult: (detections) => {
+        if (generation !== observationGeneration.current) return;
+        applyDetections(detections, context);
+        setOverlays(useInventoryStore.getState().inventory);
+      },
+      onError: (error) => { interrupt(); fail(error); },
+      onMetrics: (metrics) => onTelemetry({ ...metrics, cameraState: 'live', detecting: true }),
+    });
+  }, [cameraState, camera.capture, engine, selected, fail, visible, activeConfig, applyDetections, interrupt, onTelemetry]);
 
-  const captureWifiFrame = () => {
-    if (!wifiImgRef.current) return null;
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = wifiImgRef.current.naturalWidth || 640;
-      canvas.height = wifiImgRef.current.naturalHeight || 480;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(wifiImgRef.current, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL("image/jpeg", 0.9);
-    } catch (e) {
-      console.error("CORS Error capturing WiFi frame:", e);
-      return null;
-    }
+  useEffect(() => {
+    onTelemetry({ cameraState, detecting: cameraState === 'live' && !!models.engine && visible, durationMs: null, fps: null });
+  }, [cameraState, models.engine, visible, onTelemetry]);
+
+  const changeMode = (next) => {
+    camera.disconnect(); setActiveConfig(null); setMode(next); setUrl(next === 'bridge' ? 'http://localhost:1985' : '');
   };
-
-  /**
-   * Extrae el frame, lo convierte y llama a la API mock de IA.
-   */
-  const ejecutarEscaneoAutonomo = useCallback(async () => {
-    if (scanInProgress.current) return;
-    
-    scanInProgress.current = true;
-    setIsProcessing(true);
-    setErrorStatus(false);
-
-    try {
-      let imageSrc = null;
-      if (isWifiMode) {
-        imageSrc = captureWifiFrame();
-      } else if (webcamRef.current) {
-        imageSrc = webcamRef.current.getScreenshot();
-      }
-      
-      if (!imageSrc) throw new Error("No frame captured");
-
-      // Llamada a Simulación API IA
-      const analisisJson = await analyzeImage(imageSrc);
-      
-      // Causalidad y efecto
-      updateInventoryFromScan(analisisJson);
-    } catch (err) {
-      console.error("Falla en el ciclo de escaneo: ", err);
-      setErrorStatus(true);
-    } finally {
-      // Resetear contadores y estados
-      countdownRef.current = SCAN_INTERVAL / 1000;
-      setNextScanCountdown(countdownRef.current);
-      
-      setIsProcessing(false);
-      scanInProgress.current = false;
-    }
-  }, [updateInventoryFromScan, setIsProcessing, setNextScanCountdown, isWifiMode]);
-
-  // Motor de Bucle Principal (Seguro contra closures)
-  useEffect(() => {
-    const secTimer = setInterval(() => {
-      // Bloquear el conteo si el modelo de red está en análisis
-      if (!scanInProgress.current) {
-        countdownRef.current = Math.max(countdownRef.current - 1, 0);
-        
-        if (countdownRef.current === 0) {
-          // Forzar a 0 antes de procesar
-          setNextScanCountdown(0);
-          ejecutarEscaneoAutonomo();
-        } else {
-          setNextScanCountdown(countdownRef.current);
-        }
-      }
-    }, 1000);
-
-    return () => clearInterval(secTimer);
-  }, [ejecutarEscaneoAutonomo, setNextScanCountdown]);
-
-  return (
-    <div className="relative group rounded-xl overflow-hidden glass-panel p-2">
-      <div className="flex flex-col mb-2 space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs text-brand-400 font-semibold uppercase tracking-wider pl-1 font-mono flex items-center">
-            Fuente de captura
-          </label>
-          <button 
-            onClick={() => setIsWifiMode(!isWifiMode)}
-            className={`text-xs px-3 py-1 rounded-full font-medium transition-all flex items-center shadow-sm border ${
-              isWifiMode 
-                ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' 
-                : 'bg-dark-800 text-gray-400 border-dark-600 hover:bg-dark-700'
-            }`}
-          >
-            <Wifi className="w-3 h-3 mr-1" />
-            {isWifiMode ? 'Modo WiFi IP' : 'Añadir Cam WiFi'}
-          </button>
-        </div>
-        
-        {isWifiMode ? (
-          <input 
-            type="text" 
-            placeholder="http://192.168.1.100:81/stream" 
-            className="bg-dark-900 border border-brand-500/50 text-white text-sm rounded-lg p-2 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none w-full placeholder-gray-600"
-            value={wifiUrl}
-            onChange={(e) => setWifiUrl(e.target.value)}
-          />
-        ) : (
-          <select 
-            className="bg-dark-900 border border-dark-700 text-white text-sm rounded-lg p-2 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none w-full"
-            onChange={(e) => setDeviceId(e.target.value)}
-            value={deviceId || ''}
-          >
-            {cameras.map((camera, key) => (
-              <option key={camera.deviceId} value={camera.deviceId}>
-                {camera.label || `Cámara ${key + 1}`}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      <div className="relative bg-black rounded-lg overflow-hidden flex items-center justify-center min-h-[250px]">
-         {/* Webcam Setup */}
-         {isWifiMode ? (
-           wifiUrl ? (
-             <img 
-               ref={wifiImgRef}
-               src={wifiUrl}
-               crossOrigin="anonymous"
-               alt="WiFi Camera Stream"
-               className={`w-full h-full object-cover min-h-[300px] transition-opacity duration-300 ${isProcessing ? 'opacity-50' : 'opacity-100'}`}
-               onError={() => setErrorStatus(true)}
-               onLoad={() => setErrorStatus(false)}
-             />
-           ) : (
-             <div className="text-gray-500 text-sm flex flex-col items-center">
-               <Wifi className="w-8 h-8 mb-2 opacity-50" />
-               Ingresa la URL del stream WiFi
-             </div>
-           )
-         ) : (
-           <Webcam
-             audio={false}
-             height={300}
-             ref={webcamRef}
-             screenshotFormat="image/jpeg"
-             videoConstraints={{ deviceId: deviceId }}
-             className={`w-full object-cover transition-opacity duration-300 ${isProcessing ? 'opacity-50' : 'opacity-100'}`}
-           />
-         )}
-         
-         {isProcessing && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-10 animate-pulse">
-               <RefreshCw className="w-10 h-10 text-brand-400 animate-spin" />
-               <span className="ml-3 text-brand-400 font-medium">Ejecutando Modelo de Inferencia...</span>
-            </div>
-         )}
-
-         {errorStatus && (
-            <div className="absolute inset-0 flex items-center justify-center bg-red-900/60 backdrop-blur-sm z-10 text-red-400 font-semibold p-4 text-center">
-              <AlertTriangle className="w-8 h-8 mr-2" /> Error de conexión o cámara no disponible.
-            </div>
-         )}
-         
-         <div className="absolute bottom-3 right-3 bg-dark-900/80 px-3 py-1.5 rounded-full border border-white/10 flex items-center shadow-lg">
-            <Camera className="w-4 h-4 text-white/70 mr-2" />
-            <span className="text-xs text-white/90 font-mono">
-              {isWifiMode ? 'WiFi Feed' : 'Live Feed'}
-            </span>
-         </div>
-      </div>
+  const submit = (event) => {
+    event.preventDefault();
+    const config = { mode, deviceId, url: url.trim().replace(/\/$/, ''), token };
+    setActiveConfig(config);
+    camera.connect(config);
+  };
+  return <section className="panel camera-panel" aria-labelledby="camera-title">
+    <div className="section-heading"><div><p className="eyebrow">Fuente de video</p><h2 id="camera-title"><Camera size={20} />Cámara en vivo</h2></div><span className={`badge ${cameraState === 'live' ? 'success' : ''}`}>{cameraState === 'live' ? 'Recibiendo video' : 'Sin video confirmado'}</span></div>
+    <form onSubmit={submit} className="camera-form">
+      <label className="field">Fuente<select value={mode} onChange={(event) => changeMode(event.target.value)}>
+        <option value="device">Cámara del dispositivo / USB</option><option value="bridge">EZVIZ por puente local (RTSP → WebRTC)</option><option value="snapshot">HTTP: fotos JPEG actualizadas</option>
+      </select></label>
+      {mode === 'device' ? <label className="field">Cámara<select value={deviceId} onChange={(event) => setDeviceId(event.target.value)}><option value="">Automática / trasera</option>{devices.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Cámara ${index + 1}`}</option>)}</select></label> : <>
+        <label className="field">{mode === 'bridge' ? 'Dirección del puente Windows' : 'Dirección de una foto HTTP'}<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={mode === 'bridge' ? 'http://IP-DE-LA-PC:1985' : 'https://camara/imagen.jpg'} required /></label>
+        {mode === 'bridge' && <label className="field">Clave del puente<input type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" required /><span className="fine-print">Se consulta en bridge.local.json. No es la contraseña RTSP.</span></label>}
+      </>}
+      <div className="button-row"><button className="button primary" type="submit"><PlugZap size={16} />Conectar</button><button className="button secondary" type="button" onClick={() => { camera.disconnect(); setActiveConfig(null); }}><Unplug size={16} />Desconectar</button></div>
+    </form>
+    {mode === 'bridge' && <p className="fine-print">La PC del puente y la cámara deben estar encendidas y en la misma red. En Android usá la IP de esa PC en lugar de localhost.</p>}
+    {mode === 'snapshot' && <p className="fine-print">Esta opción consulta una foto nueva cada 250 ms más el tiempo de descarga; no reproduce un stream MJPEG. La fuente debe permitir CORS.</p>}
+    <div className="video-stage" style={{ aspectRatio: `${camera.dimensions.width}/${camera.dimensions.height}` }}>
+      <video ref={videoRef} autoPlay playsInline muted className={mode === 'snapshot' ? 'hidden' : ''} />
+      <canvas ref={imageCanvasRef} className={mode === 'snapshot' ? '' : 'hidden'} />
+      {cameraState !== 'live' && <div className="video-placeholder"><Camera size={36} /><span>{cameraState === 'connecting' ? 'Esperando cuadros de la cámara…' : 'Conectá una cámara para ver el video'}</span></div>}
+      {cameraState === 'live' && <div className="detection-overlay" aria-label={`${overlays.length} detecciones`}>
+        {overlays.map((unit) => <div key={unit.id} className="detection-box" style={{ left: `${unit.box.x * 100}%`, top: `${unit.box.y * 100}%`, width: `${unit.box.width * 100}%`, height: `${unit.box.height * 100}%` }}><span>{unit.label} · {Math.round(unit.confidence * 100)}% · #{unit.id.slice(7)}</span></div>)}
+      </div>}
     </div>
-  );
+    <p className={`notice ${cameraState === 'error' ? 'error' : ''}`} role="status">{camera.status.message}</p>
+    {!visible && <p className="notice warning">Detección pausada mientras la pestaña está oculta. El tiempo de ingreso se conserva.</p>}
+    {!models.engine && <p className="notice warning">Detección detenida. Cargá un modelo compatible desde Desarrollador.</p>}
+  </section>;
 }
-
