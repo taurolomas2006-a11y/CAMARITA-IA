@@ -26,4 +26,4 @@
 - Pruebas de seguimiento, persistencia, errores, catálogo, gateway e inferencia real en navegadores Windows.
 - Documentación de instalación, cámara, actualización mediante Git y preparación de la muestra.
 
-La prueba física confirmó recepción de cuadros reales antes de preparar el push pedido por el usuario. Las credenciales, el ejecutable descargado y las capturas privadas de esa prueba permanecen excluidos de Git. La publicación automática de Vercel debe comprobarse tras el push.
+La prueba física confirmó recepción de cuadros reales antes de publicar en `main` mediante la conexión GitHub autorizada de la cuenta propietaria. Vercel completó el despliegue; se comprobaron video e inferencia desde la web HTTPS publicada en Chrome Windows. Las credenciales, el ejecutable descargado y las capturas privadas permanecen excluidos de Git. El reconocimiento físico de bebidas se pospuso por decisión del usuario.

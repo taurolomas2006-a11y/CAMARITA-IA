@@ -70,13 +70,21 @@ En esa escena no había bebidas visibles ni productos detectados; el inventario 
 
 | Plataforma | Interfaz / inventario | SSD local | Cámara física / puente |
 |---|---|---|---|
-| Windows Chrome 156 | Verificado | Verificado, CPU WASM SIMD | Verificado desde la app local; Vercel pendiente |
+| Windows Chrome 156 | Verificado | Verificado, CPU WASM SIMD | Verificado desde la app local y desde Vercel HTTPS |
 | Windows Edge 156 | Verificado | Verificado, CPU WASM SIMD | Verificado con la app compilada local; Vercel pendiente |
 | Android Chrome | Pendiente en dispositivo real | Pendiente; motor CPU previsto | Pendiente; requiere red y permisos locales |
 | Windows / Android Firefox | Pendiente | Pendiente | Pendiente; puede requerir HTTPS en el puente |
 | GPU / WebGPU | No integrado | No integrado | No aplica |
 
-RTSP de la EZVIZ y reproducción/captura WebRTC se verificaron en Chrome y Edge Windows desde la app local. Quedan sin comprobar CORS de una fuente HTTP distinta, webcam física, certificados y reproducción desde la aplicación HTTPS publicada hacia esta red. No se modificó el firewall ni la configuración del router.
+RTSP de la EZVIZ y reproducción/captura WebRTC se verificaron en Chrome y Edge Windows desde la app local. También se verificó Chrome Windows desde la web HTTPS publicada. Quedan sin comprobar una fuente HTTP distinta, webcam física, certificados propios, Edge desde Vercel y dispositivos Android. No se modificó el firewall ni la configuración del router.
+
+## Publicación y prueba desde Vercel
+
+El commit de implementación publicado es `ce9ebb5d9ccdcfecd54f14d0ea3caea838f54f1f`, con árbol `aa8e54585202f7829a77b3d17cf6bf44d5a92e69`. Este árbol coincide exactamente con el commit local validado inicialmente (`6ade697`), incluido el ONNX. El estado de Vercel para ese commit fue `success`, y la página pública pasó a servir el mismo archivo JS compilado y HTML con `no-store`.
+
+La prueba abrió **https://camarita-ia.vercel.app/** en Chrome Windows, concediendo únicamente a ese origen los permisos normales de red local/loopback en el contexto aislado del navegador de prueba. No se desactivaron protecciones ni se ignoraron certificados. La página se conectó al gateway HTTP local, recibió video 1920 × 1080 y cargó el modelo y WASM desde Vercel. El video avanzó de 6 a 229 cuadros decodificados, de 0,32 a 15,36 segundos, mientras la IA procesaba. Una medición indicó 315 ms y 2,7 fps efectivos; no hubo errores JavaScript. La escena no contenía bebidas visibles y el inventario quedó vacío.
+
+Git por consola recibió 403 porque autenticaba como `FernandoJavierNegro`. La conexión GitHub de Codex autenticaba como la cuenta propietaria y tenía permiso de escritura; se utilizó esa conexión, verificando los SHA de los binarios y del árbol completo antes de actualizar `main`, sin force-push. No se cambiaron credenciales globales. El checkout local se sincronizó únicamente después de comprobar igualdad de árboles.
 
 La revisión final también reprodujo y corrigió dos casos: una inferencia anterior podía seguir en curso al reiniciar el planificador, y los FPS no incluían su espera. El motor ahora descarta nuevas capturas mientras está ocupado, sin acumular cola, incluso entre ciclos consecutivos. Se agregaron pruebas de exclusión compartida entre ciclos y de medición real de frecuencia.
 
@@ -88,4 +96,4 @@ También se cubrió la recarga de un modelo mientras hay procesamiento o captura
 2. En Windows abrir la app, conectar el puente y cargar el modelo. La captura e inferencia local ya se comprobaron; falta colocar productos para evaluar detecciones físicas.
 3. En Android real, abrir la app por HTTPS, permitir acceso a red local, introducir la dirección de Windows y la clave del puente si corresponde, y comprobar recepción continua.
 4. Probar dos unidades iguales visibles, retirar una, reingresarla, provocar oclusión y cortar/restablecer la cámara. El usuario decidió realizar esta prueba física con bebidas otro día; queda pendiente y no condiciona el push autorizado tras conectar la cámara.
-5. Después del push, comprobar el despliegue de Vercel y repetir actualización de app/modelo en cada dispositivo.
+5. Repetir actualización de app/modelo en cada dispositivo. El despliegue actual y la conexión desde Vercel se comprobaron en Chrome Windows; Android y Edge desde ese origen siguen pendientes.
